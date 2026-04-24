@@ -16,7 +16,7 @@ async def health_check(settings: Settings = Depends(get_settings)) -> HealthResp
     """Return a minimal health response for load balancers and readiness checks."""
     return HealthResponse(
         status="ok",
-        service=settings.service_name,
-        environment=settings.environment,
+        service=settings.app_name,
+        environment=settings.app_env,
         timestamp=datetime.now(timezone.utc),
     )

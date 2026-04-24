@@ -1,6 +1,8 @@
 """FastAPI application bootstrap for the VAM AI agent service."""
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -10,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import health, runtime, session, tools, webhook
 from app.core.config import get_settings
-from app.core.exceptions import AppError
+from app.core.exceptions import AppException, error_payload_for_exception, http_status_for_exception
 from app.core.logging import configure_logging
 from app.models.common import ErrorDetail, ErrorResponse
 
@@ -21,12 +23,13 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     """Create and configure the FastAPI app."""
     settings = get_settings()
-    configure_logging(settings.log_level, settings.service_name)
+    configure_logging(settings.log_level, settings.app_name)
 
     app = FastAPI(
-        title=settings.service_name,
+        title=settings.app_name,
         version="0.1.0",
         description="Secure Python orchestration service for the VAM assistant platform.",
+        lifespan=lifespan,
     )
 
     register_exception_handlers(app)
@@ -36,7 +39,7 @@ def create_app() -> FastAPI:
 
 def register_routers(app: FastAPI, api_prefix: str) -> None:
     """Register all API routers, including placeholders for future integrations."""
-    app.include_router(health.router, prefix=api_prefix)
+    app.include_router(health.router)
     app.include_router(session.router, prefix=api_prefix)
     app.include_router(runtime.router, prefix=api_prefix)
     app.include_router(tools.router, prefix=api_prefix)
@@ -46,14 +49,15 @@ def register_routers(app: FastAPI, api_prefix: str) -> None:
 def register_exception_handlers(app: FastAPI) -> None:
     """Install a consistent API error envelope."""
 
-    @app.exception_handler(AppError)
-    async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
+    @app.exception_handler(AppException)
+    async def handle_app_error(request: Request, exc: AppException) -> JSONResponse:
+        error = error_payload_for_exception(exc)
         return build_error_response(
             request=request,
-            status_code=exc.status_code,
-            code=exc.code,
-            message=exc.message,
-            details=exc.details,
+            status_code=http_status_for_exception(exc),
+            code=str(error["code"]),
+            message=str(error["message"]),
+            details=dict(error["details"]),
         )
 
     @app.exception_handler(RequestValidationError)
@@ -95,6 +99,20 @@ def build_error_response(
         trace_id=trace_id,
     )
     return JSONResponse(status_code=status_code, content=jsonable_encoder(payload))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Log application lifecycle events."""
+    settings = get_settings()
+    logger.info(
+        "Application startup",
+        extra={"appEnv": settings.app_env, "host": settings.app_host, "port": settings.app_port},
+    )
+    try:
+        yield
+    finally:
+        logger.info("Application shutdown", extra={"appEnv": settings.app_env})
 
 
 app = create_app()

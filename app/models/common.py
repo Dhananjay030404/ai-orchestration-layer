@@ -27,6 +27,12 @@ class ErrorResponse(ApiModel):
     trace_id: str | None = None
 
 
+class MessageResponse(ApiModel):
+    """Reusable success envelope for command-style endpoints."""
+
+    message: str
+
+
 class HealthResponse(ApiModel):
     """Response returned by the health endpoint."""
 
