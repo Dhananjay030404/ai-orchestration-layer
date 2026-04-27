@@ -7,8 +7,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import AuthorizationError
 from typing import Any
 
-from app.models.common import DelegatedPrincipal
-from app.models.session import SessionContext
+from app.models.session import SessionContext, ValidatedAssistantClaims
 from app.repositories.session_repository import SessionRepository
 
 
@@ -21,7 +20,7 @@ class SessionService:
 
     async def create_session(
         self,
-        principal: DelegatedPrincipal,
+        principal: ValidatedAssistantClaims,
         metadata: dict[str, Any],
     ) -> SessionContext:
         """Create a session scoped to the validated delegated principal."""
@@ -46,7 +45,7 @@ class SessionService:
     async def get_session_for_principal(
         self,
         session_id: str,
-        principal: DelegatedPrincipal,
+        principal: ValidatedAssistantClaims,
     ) -> SessionContext:
         """Return a session only when the current token matches its trusted principal."""
         session = await self.get_session(session_id)

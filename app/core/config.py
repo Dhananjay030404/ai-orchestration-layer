@@ -20,13 +20,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     assistant_jwt_secret: str | None = None
-    assistant_jwt_algorithm: str = "HS256"
+    assistant_jwt_algorithm: str = "HS512"
     assistant_jwt_issuer: str | None = Field(
-        default=None,
+        default="aftermarket-backend",
         validation_alias=AliasChoices("ASSISTANT_JWT_ISSUER", "DELEGATED_TOKEN_ISSUER"),
     )
     assistant_jwt_audience: str = Field(
-        default="vam-ai-agent-service",
+        default="vam-python-assistant",
         validation_alias=AliasChoices("ASSISTANT_JWT_AUDIENCE", "DELEGATED_TOKEN_AUDIENCE"),
     )
     assistant_session_ttl_seconds: PositiveInt = Field(
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DELEGATED_TOKEN_PUBLIC_KEY", "ASSISTANT_JWT_SECRET"),
     )
     delegated_token_jwks_url: AnyHttpUrl | None = None
-    delegated_token_algorithms: list[str] = Field(default_factory=lambda: ["HS256"])
+    delegated_token_algorithms: list[str] = Field(default_factory=lambda: ["HS512"])
 
     model_config = SettingsConfigDict(
         env_file=".env",

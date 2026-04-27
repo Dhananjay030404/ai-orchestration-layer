@@ -3,8 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from app.models.common import DelegatedPrincipal
-from app.models.session import SessionContext
+from app.models.session import SessionContext, ValidatedAssistantClaims
 from app.models.tools import ToolCallResponse, ToolDefinition
 
 
@@ -28,7 +27,7 @@ class BaseTool(ABC):
         self,
         *,
         session: SessionContext,
-        principal: DelegatedPrincipal,
+        principal: ValidatedAssistantClaims,
         arguments: dict[str, Any],
     ) -> ToolCallResponse:
         """Execute the tool after token, session, and permission checks pass."""

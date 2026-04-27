@@ -1,7 +1,7 @@
 """Authorization checks over already-validated delegated principal claims."""
 
 from app.core.exceptions import AuthorizationError
-from app.models.common import DelegatedPrincipal
+from app.models.session import ValidatedAssistantClaims
 
 
 class AuthorizationService:
@@ -9,7 +9,7 @@ class AuthorizationService:
 
     def require_permissions(
         self,
-        principal: DelegatedPrincipal,
+        principal: ValidatedAssistantClaims,
         required_permissions: list[str],
     ) -> None:
         """Require all permissions declared by a tool contract."""

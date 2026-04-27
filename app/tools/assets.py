@@ -2,8 +2,7 @@
 
 from typing import Any
 
-from app.models.common import DelegatedPrincipal
-from app.models.session import SessionContext
+from app.models.session import SessionContext, ValidatedAssistantClaims
 from app.models.tools import ToolCallResponse
 from app.tools.base import BaseTool
 
@@ -19,7 +18,7 @@ class AssetsTool(BaseTool):
         self,
         *,
         session: SessionContext,
-        principal: DelegatedPrincipal,
+        principal: ValidatedAssistantClaims,
         arguments: dict[str, Any],
     ) -> ToolCallResponse:
         """Return a placeholder until VAM asset API contracts are implemented."""
