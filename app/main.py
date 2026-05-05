@@ -8,13 +8,15 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import health, runtime, session, tools, webhook
-from app.core.config import get_settings
+from app.api.routes import health, session, tools
+from app.core.config import Settings, get_settings
 from app.core.exceptions import AppException, error_payload_for_exception, http_status_for_exception
 from app.core.logging import configure_logging
 from app.models.common import ErrorDetail, ErrorResponse
+from app.repositories.session_repository import close_session_repository, initialize_session_repository
 
 
 logger = logging.getLogger(__name__)
@@ -28,22 +30,43 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        description="Secure Python orchestration service for the VAM assistant platform.",
+        description="Secure Python runtime service for the VAM assistant platform.",
         lifespan=lifespan,
     )
 
     register_exception_handlers(app)
+    register_cors(app, settings)
     register_routers(app, settings.api_prefix)
     return app
 
 
+def register_cors(app: FastAPI, settings: Settings) -> None:
+    """Register browser CORS policy when frontend origins are configured."""
+    if not settings.cors_allowed_origins:
+        logger.info("CORS middleware disabled; no allowed origins configured.")
+        return
+
+    allow_credentials = "*" not in settings.cors_allowed_origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=allow_credentials,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Request-ID",
+            "X-Correlation-ID",
+        ],
+        expose_headers=["X-Request-ID", "X-Correlation-ID"],
+    )
+
+
 def register_routers(app: FastAPI, api_prefix: str) -> None:
-    """Register all API routers, including placeholders for future integrations."""
+    """Register only the runtime API surface needed by the ElevenLabs flow."""
     app.include_router(health.router)
-    app.include_router(session.router, prefix=api_prefix)
-    app.include_router(runtime.router, prefix=api_prefix)
-    app.include_router(tools.router, prefix=api_prefix)
-    app.include_router(webhook.router, prefix=api_prefix)
+    app.include_router(session.assistant_runtime_router)
+    app.include_router(tools.assistant_runtime_router)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -109,9 +132,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "Application startup",
         extra={"appEnv": settings.app_env, "host": settings.app_host, "port": settings.app_port},
     )
+    await initialize_session_repository()
     try:
         yield
     finally:
+        await close_session_repository()
         logger.info("Application shutdown", extra={"appEnv": settings.app_env})
 
 

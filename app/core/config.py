@@ -2,12 +2,12 @@
 
 from functools import lru_cache
 
-from pydantic import AliasChoices, AnyHttpUrl, Field, PositiveFloat, PositiveInt
+from pydantic import AliasChoices, AnyHttpUrl, Field, PositiveFloat, PositiveInt, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime settings for the orchestration service."""
+    """Runtime settings for the assistant service."""
 
     app_name: str = Field(
         default="vam-ai-agent-service",
@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     app_port: PositiveInt = 8000
     api_prefix: str = Field(default="/api/v1", validation_alias="API_PREFIX")
     log_level: str = "INFO"
+    cors_allowed_origins_raw: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CORS_ALLOWED_ORIGINS", "FRONTEND_ORIGINS"),
+    )
 
     assistant_jwt_secret: str | None = None
     assistant_jwt_algorithm: str = "HS512"
@@ -30,7 +34,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ASSISTANT_JWT_AUDIENCE", "DELEGATED_TOKEN_AUDIENCE"),
     )
     assistant_session_ttl_seconds: PositiveInt = Field(
-        default=3600,
+        default=600,
         validation_alias=AliasChoices("ASSISTANT_SESSION_TTL_SECONDS", "SESSION_TTL_SECONDS"),
     )
 
@@ -48,7 +52,18 @@ class Settings(BaseSettings):
         ),
     )
 
-    redis_url: str | None = None
+    session_repository_backend: str = Field(default="mysql", validation_alias="SESSION_REPOSITORY_BACKEND")
+    mysql_host: str | None = Field(default=None, validation_alias="MYSQL_HOST")
+    mysql_port: PositiveInt = Field(default=3306, validation_alias="MYSQL_PORT")
+    mysql_database: str | None = Field(default=None, validation_alias="MYSQL_DATABASE")
+    mysql_user: str | None = Field(default=None, validation_alias="MYSQL_USER")
+    mysql_password: str | None = Field(default=None, validation_alias="MYSQL_PASSWORD")
+    mysql_pool_min_size: PositiveInt = Field(default=1, validation_alias="MYSQL_POOL_MIN_SIZE")
+    mysql_pool_max_size: PositiveInt = Field(default=10, validation_alias="MYSQL_POOL_MAX_SIZE")
+    mysql_connect_timeout_seconds: PositiveFloat = Field(
+        default=10.0,
+        validation_alias="MYSQL_CONNECT_TIMEOUT_SECONDS",
+    )
 
     delegated_token_public_key: str | None = Field(
         default=None,
@@ -56,6 +71,34 @@ class Settings(BaseSettings):
     )
     delegated_token_jwks_url: AnyHttpUrl | None = None
     delegated_token_algorithms: list[str] = Field(default_factory=lambda: ["HS512"])
+
+    @field_validator(
+        "assistant_jwt_secret",
+        "elevenlabs_api_key",
+        "elevenlabs_agent_id",
+        "vam_backend_base_url",
+        "cors_allowed_origins_raw",
+        "mysql_host",
+        "mysql_database",
+        "mysql_user",
+        "mysql_password",
+        "delegated_token_public_key",
+        "delegated_token_jwks_url",
+        mode="before",
+    )
+    @classmethod
+    def empty_string_as_none(cls, value: object) -> object:
+        """Treat blank optional environment values as unset."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_mysql_pool_sizes(self) -> "Settings":
+        """Require a valid MySQL pool size range."""
+        if self.mysql_pool_min_size > self.mysql_pool_max_size:
+            raise ValueError("MYSQL_POOL_MIN_SIZE must not exceed MYSQL_POOL_MAX_SIZE.")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -79,6 +122,17 @@ class Settings(BaseSettings):
     def session_ttl_seconds(self) -> int:
         """Backward-compatible session TTL used by the session service."""
         return self.assistant_session_ttl_seconds
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        """Return configured browser origins allowed to call this service."""
+        if not self.cors_allowed_origins_raw:
+            return []
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins_raw.split(",")
+            if origin.strip()
+        ]
 
     @property
     def vam_backend_timeout_seconds(self) -> float:

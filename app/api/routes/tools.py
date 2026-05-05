@@ -3,38 +3,50 @@
 from fastapi import APIRouter, Depends
 
 from app.core.security import require_delegated_token
-from app.models.tools import ToolCallRequest, ToolCallResponse, ToolDefinition
+from app.models.tools import ToolExecutionRequest, ToolExecutionResponse
 from app.repositories.session_repository import session_repository
 from app.services.authorization_service import AuthorizationService
 from app.services.session_service import SessionService
 from app.services.token_validation_service import TokenValidationService
+from app.services.tool_execution_service import ToolExecutionService
 from app.tools.registry import tool_registry
 
 
-router = APIRouter(prefix="/tools", tags=["tools"])
+assistant_runtime_router = APIRouter(prefix="/assistant/runtime/tools", tags=["assistant-runtime-tools"])
 
 
-def get_session_service() -> SessionService:
+async def get_session_service() -> SessionService:
     """Provide the session service dependency."""
     return SessionService(repository=session_repository)
 
 
-@router.get("", response_model=list[ToolDefinition])
-async def list_tools() -> list[ToolDefinition]:
-    """List registered tool contracts without exposing implementation details."""
-    return tool_registry.list_definitions()
+async def get_token_validation_service() -> TokenValidationService:
+    """Provide the delegated token validation service dependency."""
+    return TokenValidationService()
 
 
-@router.post("/call", response_model=ToolCallResponse)
-async def call_tool(
-    payload: ToolCallRequest,
-    bearer_token: str = Depends(require_delegated_token),
+async def get_tool_execution_service(
     session_service: SessionService = Depends(get_session_service),
-) -> ToolCallResponse:
-    """Execute a registered tool after delegated token and session authorization."""
-    principal = await TokenValidationService().validate_delegated_token(bearer_token)
-    session = await session_service.get_session_for_principal(payload.session_id, principal)
-    tool = tool_registry.get(payload.tool_name)
+) -> ToolExecutionService:
+    """Provide the runtime tool execution service dependency."""
+    return ToolExecutionService(
+        session_service=session_service,
+        authorization_service=AuthorizationService(),
+        registry=tool_registry,
+    )
 
-    AuthorizationService().require_permissions(principal, tool.required_permissions)
-    return await tool.execute(session=session, principal=principal, arguments=payload.arguments)
+
+@assistant_runtime_router.post(
+    "/execute",
+    response_model=ToolExecutionResponse,
+    response_model_by_alias=True,
+)
+async def execute_runtime_tool(
+    payload: ToolExecutionRequest,
+    bearer_token: str = Depends(require_delegated_token),
+    token_service: TokenValidationService = Depends(get_token_validation_service),
+    execution_service: ToolExecutionService = Depends(get_tool_execution_service),
+) -> ToolExecutionResponse:
+    """Execute a runtime tool request from a trusted assistant runtime flow."""
+    claims = await token_service.validate_runtime_tool_token(bearer_token)
+    return await execution_service.execute_for_runtime_tool_token(payload, claims)
