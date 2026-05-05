@@ -46,11 +46,17 @@ class Settings(BaseSettings):
     vam_backend_base_url: AnyHttpUrl | None = None
     vam_backend_profile_path_template: str | None = Field(
         default=None,
-        validation_alias="VAM_BACKEND_PROFILE_PATH_TEMPLATE",
+        validation_alias=AliasChoices(
+            "VAM_BACKEND_PROFILE_PATH_TEMPLATE",
+            "vam_backend_profile_path_template",
+        ),
     )
     vam_backend_asset_list_path_template: str | None = Field(
         default=None,
-        validation_alias="VAM_BACKEND_ASSET_LIST_PATH_TEMPLATE",
+        validation_alias=AliasChoices(
+            "VAM_BACKEND_ASSET_LIST_PATH_TEMPLATE",
+            "vam_backend_asset_list_path_template",
+        ),
     )
     vam_internal_api_timeout_seconds: PositiveFloat = Field(
         default=10.0,
