@@ -1,59 +1,8 @@
 # VAM AI Agent Service
 
-Secure Python runtime layer for the VAM assistant platform.
+Python runtime service for VAM assistant sessions and approved tool execution.
 
-This service is not the primary conversational brain. ElevenLabs is the default
-conversation and voice runtime. The Python service is the trusted boundary that:
-
-- validates delegated assistant JWTs issued by the VAM backend
-- creates short-lived runtime sessions
-- initializes ElevenLabs signed conversation URLs
-- issues Python runtime tool tokens
-- executes approved backend tools under Python authorization control
-- persists runtime session state in MySQL
-
-## Platform Flow
-
-```text
-Frontend
-  -> VAM backend /start-assistant
-
-VAM backend
-  -> validates user/customer
-  -> decides assistant scopes
-  -> mints delegated assistant JWT
-  -> returns assistantToken to frontend
-
-Frontend
-  -> Python /assistant/runtime/session
-     Authorization: Bearer <assistantToken>
-
-Python
-  -> validates delegated JWT
-  -> stores runtime session in MySQL
-  -> initializes ElevenLabs signed conversation URL
-  -> returns signed URL, runtimeSessionId, runtimeToolToken
-
-Frontend
-  -> starts ElevenLabs conversation using signed URL
-
-ElevenLabs server tool
-  -> Python /assistant/runtime/tools/execute
-     Authorization: Bearer <runtimeToolToken>
-
-Python
-  -> validates runtime tool token
-  -> loads active runtime session from MySQL
-  -> verifies assistant scope
-  -> calls VAM backend with delegated JWT
-  -> returns normalized assistant-safe tool result
-```
-
-The VAM backend remains the source of truth for customer identity, assistant
-scopes, and manufacturer context. Frontend request bodies are never trusted for
-identity or authorization claims.
-
-## Active HTTP Surface
+## Endpoints
 
 ```text
 GET  /health
@@ -62,76 +11,33 @@ POST /assistant/runtime/session
 POST /assistant/runtime/tools/execute
 ```
 
-`/health` is a lightweight liveness check. `/ready` verifies required
-persistence is reachable.
-
-## Active Tools
-
-Only these tools are registered today:
-
-| Tool | Required Scope | Purpose |
-| --- | --- | --- |
-| `profile_read` | `CUSTOMER_PROFILE_READ` | Read the trusted customer's normalized profile |
-| `customer_asset` | `CUSTOMER_ASSET_READ` | List the trusted customer's assets |
-
-Other tool scopes may appear in backend-issued tokens, but unsupported tools are
-not registered in Python and cannot execute.
-
-## Directory Structure
+## Tools
 
 ```text
-vam-ai-agent-service/
-  app/
-    main.py
-    api/
-      routes/
-        health.py
-        session.py
-        tools.py
-    core/
-      config.py
-      exceptions.py
-      logging.py
-      security.py
-    models/
-      common.py
-      elevenlabs.py
-      session.py
-      tools.py
-    repositories/
-      session_repository.py
-    services/
-      audit_service.py
-      authorization_service.py
-      elevenlabs_service.py
-      session_service.py
-      token_validation_service.py
-      tool_execution_service.py
-      vam_client.py
-    tools/
-      assets.py
-      base.py
-      profile.py
-      registry.py
-  tests/
-  .env.example
-  requirements.txt
-  README.md
+profile_read
+customer_asset
 ```
 
-## Local Setup
+## Setup
 
 ```bash
-cd vam-ai-agent-service
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill `.env` with real local values:
+Configure `.env`:
 
 ```env
+APP_NAME=
+APP_ENV=
+APP_HOST=
+APP_PORT=
+API_PREFIX=
+LOG_LEVEL=
+CORS_ALLOWED_ORIGINS=
+
 ASSISTANT_JWT_SECRET=
 ASSISTANT_JWT_ALGORITHM=
 ASSISTANT_JWT_ISSUER=
@@ -162,23 +68,32 @@ MYSQL_CONNECT_TIMEOUT_SECONDS=
 Create the local database if needed:
 
 ```bash
-mysql -u <mysql user> -p -e "CREATE DATABASE IF NOT EXISTS vam_ai_agent CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u <mysql_user> -p -e "CREATE DATABASE IF NOT EXISTS <mysql_database> CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-Start the service:
+Start:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Checks:
+## Test
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/ready
+python -m compileall app tests
+python -m pytest -q
 ```
 
-## Runtime Session Curl
+Optional live VAM smoke test env:
+
+```env
+VAM_PROFILE_INTEGRATION_CUSTOMER_ID=
+VAM_PROFILE_INTEGRATION_TOKEN=
+```
+
+## Curl
+
+Create runtime session:
 
 ```bash
 curl -X POST http://localhost:8000/assistant/runtime/session \
@@ -187,19 +102,7 @@ curl -X POST http://localhost:8000/assistant/runtime/session \
   -d '{}'
 ```
 
-Successful response includes:
-
-- `runtimeSessionId`
-- `assistantSessionId`
-- `elevenlabsSignedUrl`
-- `runtimeToolToken`
-- `elevenlabsDynamicVariables`
-
-## Tool Execution Curls
-
-Use `runtimeToolToken`, not the backend `assistantToken`.
-
-Profile:
+Execute a tool:
 
 ```bash
 curl -X POST http://localhost:8000/assistant/runtime/tools/execute \
@@ -211,8 +114,6 @@ curl -X POST http://localhost:8000/assistant/runtime/tools/execute \
     "parameters": {}
   }'
 ```
-
-Asset listing:
 
 ```bash
 curl -X POST http://localhost:8000/assistant/runtime/tools/execute \
@@ -227,58 +128,3 @@ curl -X POST http://localhost:8000/assistant/runtime/tools/execute \
     }
   }'
 ```
-
-## Persistence
-
-Runtime sessions are stored in MySQL. The app creates this table automatically
-on startup:
-
-```sql
-assistant_runtime_sessions
-```
-
-Stored session payloads include the delegated backend JWT because Python must
-forward it when calling VAM backend tool routes. Protect the MySQL database with
-normal production controls:
-
-- restricted database user
-- private network access
-- encrypted database storage where available
-- short assistant token TTL
-- no token logging
-
-## Security Model
-
-- `/assistant/runtime/session` accepts only the backend-issued delegated assistant JWT.
-- `/assistant/runtime/tools/execute` accepts only Python-issued `runtime_tool` JWTs.
-- Tool authorization is based on scopes stored in the server-side runtime session.
-- Tool inputs cannot override customer identity.
-- VAM backend calls are made with the original delegated backend JWT.
-- Raw backend responses are normalized before returning to ElevenLabs/tool callers.
-- Unknown tool names fail through the registry.
-
-## Tests
-
-```bash
-python -m compileall app
-python -m pytest -q
-```
-
-The live VAM profile smoke test is skipped unless these are configured:
-
-```env
-VAM_PROFILE_INTEGRATION_CUSTOMER_ID=
-VAM_PROFILE_INTEGRATION_TOKEN=
-VAM_BACKEND_BASE_URL=
-VAM_BACKEND_PROFILE_PATH_TEMPLATE=
-```
-
-## Production Notes
-
-- Run behind HTTPS.
-- Configure strict `CORS_ALLOWED_ORIGINS` for browser usage.
-- Store `.env` secrets in a secret manager in production.
-- Use MySQL credentials with minimum required privileges.
-- Configure ElevenLabs server tools to call the public Python URL, not localhost.
-- Pass `runtimeSessionId` and `runtimeToolToken` to ElevenLabs as dynamic variables.
-- Do not enable additional tools until they have explicit registry entries, scope checks, and assistant-safe normalizers.
