@@ -57,27 +57,27 @@ class ExpiredTokenError(InvalidTokenError):
 
 
 class SessionNotFoundError(AppException):
-    """Raised when an orchestration session cannot be found."""
+    """Raised when a runtime session cannot be found."""
 
     status_code = HTTPStatus.NOT_FOUND
     code = "session_not_found"
-    message = "The orchestration session was not found."
+    message = "The runtime session was not found."
 
 
 class SessionExpiredError(AppException):
-    """Raised when an orchestration session is no longer valid."""
+    """Raised when a runtime session is no longer valid."""
 
     status_code = HTTPStatus.GONE
     code = "session_expired"
-    message = "The orchestration session has expired."
+    message = "The runtime session has expired."
 
 
 class SessionClosedError(AppException):
-    """Raised when a closed orchestration session is used."""
+    """Raised when a closed runtime session is used."""
 
     status_code = HTTPStatus.CONFLICT
     code = "session_closed"
-    message = "The orchestration session is closed."
+    message = "The runtime session is closed."
 
 
 class VendorIntegrationError(AppException):
@@ -88,6 +88,14 @@ class VendorIntegrationError(AppException):
     message = "Vendor integration failed."
 
 
+class DependencyUnavailableError(AppException):
+    """Raised when a required service dependency is unavailable."""
+
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+    code = "dependency_unavailable"
+    message = "A required service dependency is unavailable."
+
+
 class BackendClientError(AppException):
     """Raised when the internal VAM backend integration fails."""
 
@@ -96,12 +104,86 @@ class BackendClientError(AppException):
     message = "Backend service call failed."
 
 
+class BackendClientConfigurationError(BackendClientError):
+    """Raised when the VAM backend client is not configured correctly."""
+
+    status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+    code = "backend_client_configuration_error"
+    message = "Backend client configuration is invalid."
+
+
+class ConfigurationError(AppException):
+    """Raised when service configuration is missing or invalid."""
+
+    status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+    code = "configuration_error"
+    message = "Service configuration is invalid."
+
+
+class BackendClientNetworkError(BackendClientError):
+    """Raised when the VAM backend cannot be reached."""
+
+    code = "backend_client_network_error"
+    message = "Backend service is unavailable."
+
+
+class BackendClientTimeoutError(BackendClientNetworkError):
+    """Raised when the VAM backend does not respond within the timeout."""
+
+    code = "backend_client_timeout"
+    message = "Backend service request timed out."
+
+
+class BackendClientHTTPError(BackendClientError):
+    """Raised when the VAM backend returns an unsuccessful HTTP status."""
+
+    code = "backend_client_http_error"
+    message = "Backend service returned an unsuccessful response."
+
+
+class BackendClientResponseError(BackendClientError):
+    """Raised when the VAM backend returns an invalid response shape."""
+
+    code = "backend_client_response_error"
+    message = "Backend service returned an invalid response."
+
+
 class ToolExecutionError(AppException):
-    """Raised when an orchestration tool fails during execution."""
+    """Raised when an assistant tool fails during execution."""
 
     status_code = HTTPStatus.BAD_GATEWAY
     code = "tool_execution_error"
     message = "Tool execution failed."
+
+
+class UnknownToolError(AppException):
+    """Raised when a requested tool is not registered."""
+
+    status_code = HTTPStatus.NOT_FOUND
+    code = "unknown_tool"
+    message = "The requested tool is not registered."
+
+
+class MissingToolScopeError(AuthorizationError):
+    """Raised when the runtime session lacks a required assistant scope."""
+
+    code = "missing_tool_scope"
+    message = "The runtime session does not include the required tool scope."
+
+
+class InvalidManufacturerAccessError(AuthorizationError):
+    """Raised when a tool request violates manufacturer scoping."""
+
+    code = "invalid_manufacturer_access"
+    message = "The requested manufacturer is outside the runtime session scope."
+
+
+class InvalidToolInputError(AppException):
+    """Raised when tool input fails validation."""
+
+    status_code = HTTPStatus.UNPROCESSABLE_ENTITY
+    code = "invalid_tool_input"
+    message = "Tool input validation failed."
 
 
 def http_status_for_exception(exc: AppException) -> int:
