@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     elevenlabs_timeout_seconds: PositiveFloat = 10.0
 
     vam_backend_base_url: AnyHttpUrl | None = None
+    vam_backend_profile_path_template: str | None = Field(
+        default=None,
+        validation_alias="VAM_BACKEND_PROFILE_PATH_TEMPLATE",
+    )
+    vam_backend_asset_list_path_template: str | None = Field(
+        default=None,
+        validation_alias="VAM_BACKEND_ASSET_LIST_PATH_TEMPLATE",
+    )
     vam_internal_api_timeout_seconds: PositiveFloat = Field(
         default=10.0,
         validation_alias=AliasChoices(
@@ -77,6 +85,8 @@ class Settings(BaseSettings):
         "elevenlabs_api_key",
         "elevenlabs_agent_id",
         "vam_backend_base_url",
+        "vam_backend_profile_path_template",
+        "vam_backend_asset_list_path_template",
         "cors_allowed_origins_raw",
         "mysql_host",
         "mysql_database",

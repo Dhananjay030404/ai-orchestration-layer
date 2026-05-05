@@ -144,6 +144,8 @@ ELEVENLABS_BASE_URL=https://api.elevenlabs.io
 ELEVENLABS_TIMEOUT_SECONDS=10
 
 VAM_BACKEND_BASE_URL=<vam backend base url>
+VAM_BACKEND_PROFILE_PATH_TEMPLATE=<relative profile route template>
+VAM_BACKEND_ASSET_LIST_PATH_TEMPLATE=<relative asset list route template>
 VAM_INTERNAL_API_TIMEOUT_SECONDS=10
 
 SESSION_REPOSITORY_BACKEND=mysql
@@ -268,6 +270,7 @@ The live VAM profile smoke test is skipped unless these are configured:
 VAM_PROFILE_INTEGRATION_CUSTOMER_ID=
 VAM_PROFILE_INTEGRATION_TOKEN=
 VAM_BACKEND_BASE_URL=
+VAM_BACKEND_PROFILE_PATH_TEMPLATE=
 ```
 
 ## Production Notes

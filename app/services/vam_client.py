@@ -5,7 +5,6 @@ client centralizes outbound HTTP behavior so tools do not know about base URLs,
 timeouts, headers, logging, or backend error mapping.
 """
 
-from dataclasses import dataclass
 import logging
 from time import perf_counter
 from typing import Any, Mapping
@@ -31,18 +30,6 @@ QueryParams = Mapping[str, Any] | None
 BackendSessionContext = RuntimeSession
 
 
-@dataclass(frozen=True)
-class VamBackendEndpointPaths:
-    """Isolated VAM backend endpoint templates used by assistant tools.
-
-    The actual Java/Spring endpoint contracts can be adjusted here without
-    changing individual tool implementations.
-    """
-
-    customer_profile: str = "/api/v1/private/customer/{customer_id}"
-    customer_asset: str = "/api/v1/private/assets"
-
-
 class VamBackendClient:
     """HTTP client for Python-mediated VAM backend operations."""
 
@@ -51,10 +38,8 @@ class VamBackendClient:
         *,
         settings: Settings | None = None,
         http_client: httpx.AsyncClient | None = None,
-        endpoint_paths: VamBackendEndpointPaths | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.endpoint_paths = endpoint_paths or VamBackendEndpointPaths()
         self._client = http_client
         self._owns_client = http_client is None
 
@@ -67,8 +52,12 @@ class VamBackendClient:
     ) -> JsonObject:
         """Read the trusted customer's profile from the VAM backend."""
         path = self._format_path(
-            self.endpoint_paths.customer_profile,
+            self._require_path_template(
+                self.settings.vam_backend_profile_path_template,
+                "VAM_BACKEND_PROFILE_PATH_TEMPLATE",
+            ),
             customer_id=session.customer_id,
+            id=session.customer_id,
         )
         return await self.request(
             "GET",
@@ -100,7 +89,10 @@ class VamBackendClient:
     ) -> JsonObject:
         """List customer assets from the VAM backend."""
         path = self._format_path(
-            self.endpoint_paths.customer_asset,
+            self._require_path_template(
+                self.settings.vam_backend_asset_list_path_template,
+                "VAM_BACKEND_ASSET_LIST_PATH_TEMPLATE",
+            ),
         )
         params = self._optional_params(
             page=page,
@@ -340,12 +332,37 @@ class VamBackendClient:
         )
 
     @staticmethod
+    def _require_path_template(value: str | None, setting_name: str) -> str:
+        if value is None or not value.strip():
+            raise BackendClientConfigurationError(
+                f"{setting_name} must be configured before assistant tools can call VAM APIs.",
+                details={"setting": setting_name},
+            )
+
+        normalized = value.strip()
+        if not normalized.startswith("/"):
+            raise BackendClientConfigurationError(
+                f"{setting_name} must be a relative path that starts with '/'.",
+                details={"setting": setting_name},
+            )
+        return normalized
+
+    @staticmethod
     def _format_path(template: str, **values: str | int | None) -> str:
         encoded_values = {
             key: quote(VamBackendClient._require_identifier(value, key), safe="")
             for key, value in values.items()
         }
-        return template.format(**encoded_values)
+        try:
+            return template.format(**encoded_values)
+        except KeyError as exc:
+            raise BackendClientConfigurationError(
+                "Backend path template contains an unsupported placeholder.",
+                details={
+                    "placeholder": str(exc).strip("'"),
+                    "supported_placeholders": sorted(encoded_values.keys()),
+                },
+            ) from exc
 
     @staticmethod
     def _require_identifier(value: str | int | None, field_name: str) -> str:

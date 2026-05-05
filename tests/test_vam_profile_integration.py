@@ -13,7 +13,7 @@ async def test_real_vam_customer_profile_endpoint_when_configured() -> None:
     """Optional live smoke for the VAM internal profile endpoint.
 
     Set VAM_PROFILE_INTEGRATION_CUSTOMER_ID, VAM_PROFILE_INTEGRATION_TOKEN,
-    and VAM_BACKEND_BASE_URL to run it.
+    VAM_BACKEND_BASE_URL, and VAM_BACKEND_PROFILE_PATH_TEMPLATE to run it.
     """
     customer_id = os.getenv("VAM_PROFILE_INTEGRATION_CUSTOMER_ID")
     if not customer_id:
@@ -25,6 +25,8 @@ async def test_real_vam_customer_profile_endpoint_when_configured() -> None:
     settings = Settings()
     if not settings.vam_backend_base_url:
         pytest.skip("VAM_BACKEND_BASE_URL is not configured.")
+    if not settings.vam_backend_profile_path_template:
+        pytest.skip("VAM_BACKEND_PROFILE_PATH_TEMPLATE is not configured.")
 
     now = datetime.now(timezone.utc)
     session = RuntimeSession(
