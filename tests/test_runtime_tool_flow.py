@@ -5,6 +5,7 @@ import jwt
 import pytest
 
 from app.core.config import Settings
+from app.core.exceptions import AuthorizationError
 from app.models.session import RuntimeSessionCreateRequest, SessionChannel
 from app.models.tools import ToolExecutionRequest
 from app.repositories.session_repository import InMemorySessionRepository
@@ -12,6 +13,7 @@ from app.services.authorization_service import AuthorizationService
 from app.services.session_service import SessionService
 from app.services.token_validation_service import TokenValidationService
 from app.services.tool_execution_service import ToolExecutionService
+from app.tools.assets import CustomerAssetTool
 from app.tools.profile import ProfileReadTool
 from app.tools.registry import ToolRegistry
 
@@ -85,7 +87,7 @@ async def test_runtime_tool_token_executes_profile_read_without_delegated_jwt() 
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=5)).timestamp()),
             "scopeMode": "customer",
-            "assistantScopes": ["CUSTOMER_PROFILE_READ"],
+            "assistantScopes": ["CUSTOMER_PROFILE_READ", "CUSTOMER_ASSET_READ"],
         },
         JWT_SECRET,
         algorithm=settings.assistant_jwt_algorithm,
@@ -107,7 +109,12 @@ async def test_runtime_tool_token_executes_profile_read_without_delegated_jwt() 
     execution_service = ToolExecutionService(
         session_service=session_service,
         authorization_service=AuthorizationService(),
-        registry=ToolRegistry([ProfileReadTool(vam_client=FakeVamClient())]),
+        registry=ToolRegistry(
+            [
+                ProfileReadTool(vam_client=FakeVamClient()),
+                CustomerAssetTool(vam_client=FakeVamClient()),
+            ]
+        ),
     )
 
     response = await execution_service.execute_for_runtime_tool_token(
@@ -130,6 +137,32 @@ async def test_runtime_tool_token_executes_profile_read_without_delegated_jwt() 
     }
     assert "internalOnly" not in str(response.result)
 
+    asset_response = await execution_service.execute_for_runtime_tool_token(
+        ToolExecutionRequest(
+            runtimeSessionId=session.runtime_session_id,
+            toolName="customer_asset",
+            parameters={"page": 0, "count": 10, "manufacturerId": "6054"},
+        ),
+        runtime_claims,
+    )
+
+    assert asset_response.status.value == "completed"
+    assert asset_response.result == {
+        "assets": [{"id": 115, "name": "Asset 115"}],
+        "recordsTotal": 1,
+        "recordsFiltered": 1,
+        "totalPages": 1,
+        "number": 0,
+    }
+
+    mismatched_request = ToolExecutionRequest(
+        runtimeSessionId="another-runtime-session",
+        toolName="profile_read",
+        parameters={},
+    )
+    with pytest.raises(AuthorizationError):
+        await execution_service.execute_for_runtime_tool_token(mismatched_request, runtime_claims)
+
 
 class FakeVamClient:
     async def get_customer_profile(self, session, *, tool_name=None, correlation_id=None):
@@ -140,6 +173,18 @@ class FakeVamClient:
                 "email": "runtime@example.com",
                 "internalOnly": "hidden",
             }
+        }
+
+    async def list_customer_assets(self, session, *, tool_name=None, correlation_id=None, **params):
+        assert params["page"] == 0
+        assert params["count"] == 10
+        assert params["manufacturer_id"] == "6054"
+        return {
+            "assets": [{"id": 115, "name": "Asset 115"}],
+            "recordsTotal": 1,
+            "recordsFiltered": 1,
+            "totalPages": 1,
+            "number": 0,
         }
 
 
