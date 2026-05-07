@@ -102,6 +102,9 @@ curl -X POST http://localhost:8000/assistant/runtime/session \
   -d '{}'
 ```
 
+For ElevenLabs webhook headers, use `elevenlabsDynamicVariables.runtimeToolAuthorization`
+as the full Authorization value because it already includes `Bearer `.
+
 Execute a tool:
 
 ```bash
