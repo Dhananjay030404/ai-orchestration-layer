@@ -6,6 +6,7 @@ from elevenlabs.types.conversation_initiation_client_data_internal import (
 from elevenlabs.types.webhook_tool_api_schema_config_input import WebhookToolApiSchemaConfigInput
 import pytest
 
+from app.api.routes.session import build_elevenlabs_dynamic_variables
 from app.core.config import Settings
 from app.models.elevenlabs import ElevenLabsConversationSession
 from app.models.session import RuntimeSessionCreateRequest, SessionChannel, ValidatedAssistantClaims
@@ -30,6 +31,14 @@ def test_elevenlabs_service_reads_conversation_id_from_signed_url() -> None:
     conversation_id = ElevenLabsService._conversation_id_from_payload({}, signed_url)
 
     assert conversation_id == "conv_123"
+
+
+def test_elevenlabs_dynamic_variables_include_authorization_header_value() -> None:
+    variables = build_elevenlabs_dynamic_variables("runtime-1", "runtime.jwt")
+
+    assert variables["runtimeSessionId"] == "runtime-1"
+    assert variables["runtimeToolToken"] == "runtime.jwt"
+    assert variables["runtimeToolAuthorization"] == "Bearer runtime.jwt"
 
 
 @pytest.mark.asyncio

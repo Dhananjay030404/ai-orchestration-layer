@@ -76,9 +76,20 @@ async def create_runtime_session(
             else None
         ),
         runtime_tool_token=runtime_tool_token,
-        elevenlabs_dynamic_variables={
-            "runtimeSessionId": runtime_session.runtime_session_id,
-            "runtimeToolToken": runtime_tool_token,
-        },
+        elevenlabs_dynamic_variables=build_elevenlabs_dynamic_variables(
+            runtime_session.runtime_session_id,
+            runtime_tool_token,
+        ),
     )
 
+
+def build_elevenlabs_dynamic_variables(
+    runtime_session_id: str,
+    runtime_tool_token: str,
+) -> dict[str, str]:
+    """Build values injected into the ElevenLabs conversation at startup."""
+    return {
+        "runtimeSessionId": runtime_session_id,
+        "runtimeToolToken": runtime_tool_token,
+        "runtimeToolAuthorization": f"Bearer {runtime_tool_token}",
+    }
